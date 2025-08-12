@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Craver Labs Chatbot</title>
+<style>
+  :root{
+    --font: Inter, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    --btn-size:72px; --btn-bg:#3a86ff; --btn-bg-hover:#265ecf; --btn-radius:36px; --btn-emoji-size:40px;
+    --chat-w:360px; --chat-h:560px; --chat-bg:#fff; --chat-border:#e6e6ea; --chat-radius:16px; --shadow:0 10px 28px rgba(0,0,0,.25);
+    --hint-bg:#3a86ff; --hint-color:#fff;
+    --bot-bg:#e5e5ea; --bot-color:#000; --user-bg:#0b93f6; --user-color:#fff; --bubble-radius:18px;
+  }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--font)}
+  #chat-button{position:fixed;right:24px;bottom:24px;width:var(--btn-size);height:var(--btn-size);border-radius:var(--btn-radius);border:none;background:var(--btn-bg);box-shadow:var(--shadow);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .08s ease,background .15s ease;line-height:1}
+  #chat-button:hover{background:var(--btn-bg-hover);transform:translateY(-1px)}
+  #chat-button span{font-size:var(--btn-emoji-size)}
+  #chat-hint{position:fixed;right:24px;bottom:calc(24px + var(--btn-size) + 10px);background:var(--hint-bg);color:var(--hint-color);padding:8px 12px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;display:none}
+
+  /* Chat window: flex column + responsive height (prevents cut-off) */
+  #chat-window{
+    position:fixed; right:24px; bottom:calc(24px + var(--btn-size) + 12px);
+    width:var(--chat-w);
+    height:min(var(--chat-h), 75vh);
+    max-height:80vh;
+    background:var(--chat-bg);
+    border:1px solid var(--chat-border);
+    border-radius:var(--chat-radius);
+    display:none; /* toggled to flex in JS */
+    overflow:hidden; z-index:99999;
+    box-shadow:var(--shadow);
+    flex-direction:column;
+  }
+  @media (max-width: 480px){
+    #chat-window{ width:92vw; height:70vh; right:4vw; bottom:calc(16px + var(--btn-size)); }
+  }
+
+  /* Lead toggle bar */
+  #lead-toggle{
+    display:none;
+    padding:6px 10px; font-size:12px; color:#333;
+    background:#f7f7fb; border-bottom:1px solid var(--chat-border);
+    cursor:pointer; user-select:none;
+  }
+
+  /* Compact lead form with title/note and hide button */
+  #lead-form{
+    display:none; grid-template-columns:1fr 1fr; gap:6px; padding:8px;
+    border-bottom:1px solid var(--chat-border); background:#fafafa;
+  }
+  #lead-title{ grid-column:span 2; font-weight:600; margin-bottom:2px }
+  #lead-note{ grid-column:span 2; font-size:12px; color:#555; margin-bottom:2px }
+  #lead-form input,#lead-form textarea{
+    width:100%; padding:6px; font-size:12px; border:1px solid #ddd; border-radius:8px; font-family:var(--font)
+  }
+  #lead-form textarea{ grid-column:span 2; height:40px; resize:vertical }
+  #lead-form button{ grid-column:span 2; border:none; padding:8px 10px; border-radius:10px; background:var(--btn-bg); color:#fff; cursor:pointer }
+  #lead-hide{ grid-column:span 2; text-align:right; font-size:12px; color:#666; cursor:pointer; user-select:none }
+
+  /* Messages area flexes */
+  #chat-messages{ display:flex; flex-direction:column; align-items:flex-start; padding:12px; flex:1; overflow-y:auto; gap:8px }
+  .row{ display:flex; flex-direction:column; max-width:85% }
+  .row.user{ align-self:flex-end }
+  .row.bot{ align-self:flex-start }
+
+  .msg{ padding:8px 12px; border-radius:var(--bubble-radius); line-height:1.35; font-size:14px; word-wrap:break-word; box-shadow:0 1px 0 rgba(0,0,0,0.04); opacity:0; animation:fadeIn .12s ease forwards }
+  .row.bot .msg{ background:var(--bot-bg); color:var(--bot-color); border-top-left-radius:6px }
+  .row.user .msg{ background:var(--user-bg); color:var(--user-color); border-top-right-radius:6px }
+  .meta{ font-size:11px; opacity:.6; margin-top:2px }
+
+  #suggestions{ display:flex; flex-wrap:wrap; gap:6px; padding:0 12px 8px 12px }
+  .suggest{ font-size:12px; padding:6px 10px; border-radius:14px; background:#f0f0f3; color:#333; cursor:pointer; border:1px solid #e6e6ea }
+
+  #input-row{ display:flex; gap:8px; border-top:1px solid var(--chat-border); padding:10px }
+  #chat-input{ flex:1; border:1px solid #ddd; border-radius:12px; padding:10px; font-size:14px; font-family:var(--font) }
+  #chat-send{ min-width:64px; border:none; border-radius:10px; background:var(--btn-bg); color:#fff; cursor:pointer; padding:0 12px }
+  #chat-send:disabled{ background:#bbb; cursor:default }
+
+  /* typing bubble */
+  .typing{ background:var(--bot-bg); color:var(--bot-color) }
+  .typing.msg{ display:inline-flex; align-items:center; gap:6px }
+  .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.4; animation:blink 1.2s infinite }
+  .dot:nth-child(2){ animation-delay:.2s }
+  .dot:nth-child(3){ animation-delay:.4s }
+
+  @keyframes blink{0%{opacity:.2;transform:translateY(0)}20%{opacity:1;transform:translateY(-2px)}40%,100%{opacity:.2;transform:translateY(0)}}
+  @keyframes fadeIn{to{opacity:1}}
+</style>
+</head>
+<body>
+
+<button id="chat-button" aria-label="Open chat"><span>💬</span></button>
+<div id="chat-hint"></div>
+
+<div id="chat-window" role="dialog" aria-modal="true" aria-label="Chat window">
+  <div id="lead-toggle"></div>
+
+  <form id="lead-form">
+    <div id="lead-title"></div>
+    <div id="lead-note"></div>
+    <input id="lead-name" placeholder="Name" required />
+    <input id="lead-email" type="email" placeholder="Email" required />
+    <input id="lead-phone" placeholder="Phone" required />
+    <textarea id="lead-message" placeholder="Message (optional)"></textarea>
+    <button type="submit">Send</button>
+    <div id="lead-hide">Hide</div>
+  </form>
+
+  <div id="chat-messages" aria-live="polite"></div>
+  <div id="suggestions"></div>
+
+  <div id="input-row">
+    <input id="chat-input" placeholder="Type your message…" aria-label="Message" autocomplete="off" />
+    <button id="chat-send" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+  const qs = new URLSearchParams(location.search);
+  const clientId = qs.get("clientId") || "craverlabsai";
+
+  const btn = document.getElementById("chat-button");
+  const btnIcon = btn.querySelector("span");
+  const hint = document.getElementById("chat-hint");
+  const win = document.getElementById("chat-window");
+  const msgs = document.getElementById("chat-messages");
+  const suggs = document.getElementById("suggestions");
+  const input = document.getElementById("chat-input");
+  const send = document.getElementById("chat-send");
+
+  const leadToggle = document.getElementById("lead-toggle");
+  const leadForm = document.getElementById("lead-form");
+  const leadTitle = document.getElementById("lead-title");
+  const leadNote = document.getElementById("lead-note");
+  const leadHide = document.getElementById("lead-hide");
+
+  let cfg = null;
+  let typingEl = null;
+  let leadTimer = null;
+  let leadDismissed = false;
+
+  const setVar = (k, v) => document.documentElement.style.setProperty(k, v);
+
+  function applyUI(u){
+    setVar("--font", u.fontFamily || getComputedStyle(document.documentElement).getPropertyValue("--font"));
+    setVar("--btn-size", (u.buttonSizePx || 72) + "px");
+    setVar("--btn-bg", u.buttonBg || "#3a86ff");
+    setVar("--btn-bg-hover", u.buttonHoverBg || "#265ecf");
+    setVar("--btn-radius", (u.buttonRadiusPx || 36) + "px");
+    setVar("--btn-emoji-size", Math.round((u.buttonSizePx || 72) * 0.55) + "px");
+
+    setVar("--chat-w", (u.chatWidthPx || 360) + "px");
+    setVar("--chat-h", (u.chatHeightPx || 560) + "px");
+    setVar("--chat-bg", u.chatBg || "#fff");
+    setVar("--chat-border", u.chatBorderColor || "#e6e6ea");
+    setVar("--chat-radius", (u.chatRadiusPx || 16) + "px");
+    setVar("--shadow", u.shadow || "0 10px 28px rgba(0,0,0,.25)");
+
+    setVar("--hint-bg", u.hintBg || "#3a86ff");
+    setVar("--hint-color", u.hintColor || "#fff");
+
+    setVar("--bot-bg", u.botBubbleBg || "#e5e5ea");
+    setVar("--bot-color", u.botBubbleColor || "#000");
+    setVar("--user-bg", u.userBubbleBg || "#0b93f6");
+    setVar("--user-color", u.userBubbleColor || "#fff");
+    setVar("--bubble-radius", (u.bubbleRadiusPx || 18) + "px");
+
+    if (u.buttonEmoji) btnIcon.textContent = u.buttonEmoji;
+  }
+
+  function smallTime(){
+    const d = new Date();
+    return d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  }
+
+  function addRow(text, who="bot"){
+    if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+
+    const wrap = document.createElement("div");
+    wrap.className = "row " + (who === "user" ? "user" : "bot");
+
+    const d = document.createElement("div");
+    d.className = "msg";
+    d.textContent = text;
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = smallTime();
+
+    wrap.appendChild(d);
+    wrap.appendChild(meta);
+    msgs.appendChild(wrap);
+
+    if (typingEl) msgs.appendChild(typingEl);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function showTyping(){
+    if (typingEl) return;
+    typingEl = document.createElement("div");
+    typingEl.className = "msg typing";
+    typingEl.setAttribute("aria-label", "Bot is typing");
+    typingEl.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    msgs.appendChild(typingEl);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  function hideTyping(){
+    if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
+    typingEl = null;
+  }
+
+  function renderSuggestions(list){
+    suggs.innerHTML = "";
+    (list || []).forEach((q) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "suggest";
+      b.textContent = q;
+      b.addEventListener("click", () => {
+        suggs.innerHTML = ""; // hide after first use
+        sendMessage(q);
+      });
+      suggs.appendChild(b);
+    });
+  }
+
+  function maybeShowLeadAfterDelay(){
+    const lf = cfg.leadForm || {};
+    if (lf.enabled === false || leadDismissed) {
+      leadToggle.style.display = lf.enabled === false ? "none" : (lf.toggleLabel ? "block" : "none");
+      return;
+    }
+    // show toggle immediately; actual form after delay
+    leadToggle.style.display = lf.toggleLabel ? "block" : "none";
+    leadToggle.textContent = lf.toggleLabel || "Leave your info";
+
+    const delay = Number(lf.delayMs || 8000);
+    if (leadTimer) clearTimeout(leadTimer);
+    leadTimer = setTimeout(() => {
+      if (!leadDismissed && win.style.display === "flex") showLeadForm();
+    }, delay);
+  }
+
+  function showLeadForm(){
+    const lf = cfg.leadForm || {};
+    document.querySelector("#lead-form button").textContent = lf.buttonLabel || "Send";
+    leadTitle.textContent = lf.title || "Want us to reach out?";
+    leadNote.textContent = lf.note || "Prefer a quick follow-up? Share your details and we’ll send tailored info.";
+    document.getElementById("lead-name").placeholder    = lf.placeholders?.name    || "Name";
+    document.getElementById("lead-email").placeholder   = lf.placeholders?.email   || "Email";
+    document.getElementById("lead-phone").placeholder   = lf.placeholders?.phone   || "Phone";
+    document.getElementById("lead-message").placeholder = lf.placeholders?.message || "Message (optional)";
+    leadForm.style.display = "grid";
+  }
+  function hideLeadForm(permanent=false){
+    leadForm.style.display = "none";
+    if (permanent) {
+      leadToggle.style.display = "none";
+      leadDismissed = true;
+    } else {
+      // keep toggle visible to reopen
+      const lf = cfg.leadForm || {};
+      leadToggle.style.display = lf.toggleLabel ? "block" : "none";
+    }
+  }
+
+  async function loadConfig(){
+    const r = await fetch(`/configs/${clientId}.json?v=${Date.now()}`);
+    if (!r.ok) throw new Error("Config load failed");
+    cfg = await r.json();
+
+    applyUI(cfg.ui || {});
+    hint.textContent = cfg.ui?.hintText || cfg.welcomeMessage || "Hi! How can I assist you today?";
+    hint.style.display = "block";
+
+    // lead toggle default visibility (form itself will appear after delay)
+    const lf = cfg.leadForm || {};
+    leadToggle.style.display = (lf.enabled === false || !lf.toggleLabel) ? "none" : "block";
+    leadToggle.textContent = lf.toggleLabel || "Leave your info";
+
+    const delayOpen = Number(cfg.ui?.proactiveOpenMs || 0);
+    if (delayOpen > 0) setTimeout(() => { if (win.style.display !== "flex") btn.click(); }, delayOpen);
+  }
+
+  function attachLeadHandlers(){
+    leadToggle.addEventListener("click", () => {
+      if (leadForm.style.display === "grid") hideLeadForm(false);
+      else showLeadForm();
+    });
+    leadHide.addEventListener("click", () => hideLeadForm(false));
+    document.getElementById("lead-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        client: clientId,
+        name: document.getElementById("lead-name").value.trim(),
+        email: document.getElementById("lead-email").value.trim(),
+        phone: document.getElementById("lead-phone").value.trim(),
+        message: document.getElementById("lead-message").value.trim(),
+      };
+      try{
+        const r = await fetch("/lead", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (data.success) {
+          addRow(cfg.ui?.leadThanks || "Thanks! We’ll be in touch shortly.", "bot");
+          hideLeadForm(true); // hide permanently after submit this session
+        } else {
+          addRow("Could not submit the form. Please try again.", "bot");
+        }
+      }catch{
+        addRow("Network error while submitting the form.", "bot");
+      }
+    });
+  }
+
+  async function sendMessage(text){
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    addRow(trimmed, "user");
+    input.value = "";
+    send.disabled = true;
+    showTyping();
+
+    try{
+      const r = await fetch(`/chat?client=${encodeURIComponent(clientId)}`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ message: trimmed })
+      });
+      const data = await r.json();
+      hideTyping();
+      addRow(data.reply || cfg.fallback?.answer || "Thanks for reaching out!", "bot");
+    }catch{
+      hideTyping();
+      addRow(cfg.fallback?.answer || "Sorry—having trouble connecting. Mind trying again?", "bot");
+    }finally{
+      send.disabled = false;
+      input.focus();
+    }
+  }
+
+  // UI events
+  btn.addEventListener("click", () => {
+    const showing = (win.style.display === "flex");
+    win.style.display = showing ? "none" : "flex";
+    hint.style.display = showing ? "block" : "none";
+
+    if (!showing) {
+      msgs.innerHTML = "";
+      addRow(cfg?.welcomeMessage || "Hi! Welcome. How can I help today?", "bot");
+      renderSuggestions(cfg?.commonQuestions || []);
+      maybeShowLeadAfterDelay();
+      input.focus();
+    } else {
+      if (leadTimer) { clearTimeout(leadTimer); leadTimer = null; }
+    }
+  });
+
+  input.addEventListener("input", () => { send.disabled = input.value.trim().length === 0; });
+  send.addEventListener("click", () => { const t = input.value.trim(); if (t) sendMessage(t); });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !send.disabled) { e.preventDefault(); send.click(); } });
+
+  (async () => {
+    try { await loadConfig(); attachLeadHandlers(); }
+    catch (e) { console.error(e); hint.textContent = "Error loading chat config."; hint.style.display = "block"; }
+  })();
+</script>
+</body>
+</html>
