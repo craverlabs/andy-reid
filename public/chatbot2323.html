@@ -18,7 +18,7 @@
   #chat-button span{font-size:var(--btn-emoji-size)}
   #chat-hint{position:fixed;right:24px;bottom:calc(24px + var(--btn-size) + 10px);background:var(--hint-bg);color:var(--hint-color);padding:8px 12px;border-radius:12px;box-shadow:var(--shadow);font-size:14px;display:none}
 
-  /* Chat window: flex column + responsive height (prevents cut-off) */
+  /* Chat window: flex column + responsive height */
   #chat-window{
     position:fixed; right:24px; bottom:calc(24px + var(--btn-size) + 12px);
     width:var(--chat-w);
@@ -27,9 +27,9 @@
     background:var(--chat-bg);
     border:1px solid var(--chat-border);
     border-radius:var(--chat-radius);
+    box-shadow:var(--shadow);
     display:none; /* toggled to flex in JS */
     overflow:hidden; z-index:99999;
-    box-shadow:var(--shadow);
     flex-direction:column;
   }
   @media (max-width: 480px){
@@ -44,7 +44,7 @@
     cursor:pointer; user-select:none;
   }
 
-  /* Compact lead form with title/note and hide button */
+  /* Lead form */
   #lead-form{
     display:none; grid-template-columns:1fr 1fr; gap:6px; padding:8px;
     border-bottom:1px solid var(--chat-border); background:#fafafa;
@@ -58,7 +58,7 @@
   #lead-form button{ grid-column:span 2; border:none; padding:8px 10px; border-radius:10px; background:var(--btn-bg); color:#fff; cursor:pointer }
   #lead-hide{ grid-column:span 2; text-align:right; font-size:12px; color:#666; cursor:pointer; user-select:none }
 
-  /* Messages area flexes */
+  /* Messages */
   #chat-messages{ display:flex; flex-direction:column; align-items:flex-start; padding:12px; flex:1; overflow-y:auto; gap:8px }
   .row{ display:flex; flex-direction:column; max-width:85% }
   .row.user{ align-self:flex-end }
@@ -69,9 +69,11 @@
   .row.user .msg{ background:var(--user-bg); color:var(--user-color); border-top-right-radius:6px }
   .meta{ font-size:11px; opacity:.6; margin-top:2px }
 
-  #suggestions{ display:flex; flex-wrap:wrap; gap:6px; padding:0 12px 8px 12px }
+  /* Suggestions */
+  #suggestions{ display:none; flex-wrap:wrap; gap:6px; padding:0 12px 8px 12px }
   .suggest{ font-size:12px; padding:6px 10px; border-radius:14px; background:#f0f0f3; color:#333; cursor:pointer; border:1px solid #e6e6ea }
 
+  /* Input row */
   #input-row{ display:flex; gap:8px; border-top:1px solid var(--chat-border); padding:10px }
   #chat-input{ flex:1; border:1px solid #ddd; border-radius:12px; padding:10px; font-size:14px; font-family:var(--font) }
   #chat-send{ min-width:64px; border:none; border-radius:10px; background:var(--btn-bg); color:#fff; cursor:pointer; padding:0 12px }
@@ -138,7 +140,7 @@
   let cfg = null;
   let typingEl = null;
   let leadTimer = null;
-  let leadDismissed = false;
+  let leadDismissed = false;  // hidden after submit/close for the session
 
   const setVar = (k, v) => document.documentElement.style.setProperty(k, v);
 
@@ -212,17 +214,23 @@
 
   function renderSuggestions(list){
     suggs.innerHTML = "";
-    (list || []).forEach((q) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "suggest";
-      b.textContent = q;
-      b.addEventListener("click", () => {
-        suggs.innerHTML = ""; // hide after first use
-        sendMessage(q);
+    if (list && list.length) {
+      suggs.style.display = "flex";
+      list.forEach((q) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "suggest";
+        b.textContent = q;
+        b.addEventListener("click", () => {
+          suggs.innerHTML = "";
+          suggs.style.display = "none";  // hide on first click
+          sendMessage(q);
+        });
+        suggs.appendChild(b);
       });
-      suggs.appendChild(b);
-    });
+    } else {
+      suggs.style.display = "none";
+    }
   }
 
   function maybeShowLeadAfterDelay(){
@@ -231,7 +239,7 @@
       leadToggle.style.display = lf.enabled === false ? "none" : (lf.toggleLabel ? "block" : "none");
       return;
     }
-    // show toggle immediately; actual form after delay
+    // Show toggle immediately, form after delay
     leadToggle.style.display = lf.toggleLabel ? "block" : "none";
     leadToggle.textContent = lf.toggleLabel || "Leave your info";
 
@@ -259,7 +267,6 @@
       leadToggle.style.display = "none";
       leadDismissed = true;
     } else {
-      // keep toggle visible to reopen
       const lf = cfg.leadForm || {};
       leadToggle.style.display = lf.toggleLabel ? "block" : "none";
     }
@@ -274,7 +281,7 @@
     hint.textContent = cfg.ui?.hintText || cfg.welcomeMessage || "Hi! How can I assist you today?";
     hint.style.display = "block";
 
-    // lead toggle default visibility (form itself will appear after delay)
+    // Toggle bar default (form itself appears by delay/toggle)
     const lf = cfg.leadForm || {};
     leadToggle.style.display = (lf.enabled === false || !lf.toggleLabel) ? "none" : "block";
     leadToggle.textContent = lf.toggleLabel || "Leave your info";
@@ -289,7 +296,7 @@
       else showLeadForm();
     });
     leadHide.addEventListener("click", () => hideLeadForm(false));
-    document.getElementById("lead-form").addEventListener("submit", async (e) => {
+    leadForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const payload = {
         client: clientId,
@@ -307,7 +314,7 @@
         const data = await r.json();
         if (data.success) {
           addRow(cfg.ui?.leadThanks || "Thanks! We’ll be in touch shortly.", "bot");
-          hideLeadForm(true); // hide permanently after submit this session
+          hideLeadForm(true); // hide permanently for this session
         } else {
           addRow("Could not submit the form. Please try again.", "bot");
         }
@@ -320,6 +327,11 @@
   async function sendMessage(text){
     const trimmed = text.trim();
     if (!trimmed) return;
+
+    // Hide suggestions on first send (typed or chip)
+    suggs.innerHTML = "";
+    suggs.style.display = "none";
+
     addRow(trimmed, "user");
     input.value = "";
     send.disabled = true;
@@ -371,3 +383,4 @@
 </script>
 </body>
 </html>
+
