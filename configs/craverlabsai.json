@@ -1,0 +1,81 @@
+{
+  "brandName": "Craver Labs AI",
+  "sheetId": "1U7CtRymU8lNsywnAzkmX3qKYNR2GTdwiIwU565h8iX0",
+
+  "model": { "name": "gpt-3.5-turbo" },
+
+  "systemPrompt": "Be friendly, natural, and concise. Match the user's tone without being repetitive. Only use the details given in this context and FAQs. If info is missing, say you're not certain and offer contact details. For any question related to pricing or money, reply exactly: our service costs $35 per month with an initial setup fee of $75.",
+
+  "welcomeMessage": "Hi! I’m here to help with setup, support, or pricing—what do you need?",
+  "closingMessage": "Okay! If you'd like to connect further, please fill out the form above.",
+  "fallback": { "answer": "I’m not certain based on what I have. Would you like me to connect you with our team?" },
+
+  "commonQuestions": [
+    "How do I install the chatbot on my website?",
+    "What are your hours of support?",
+    "What is the pricing model?"
+  ],
+
+  "faqs": [
+    {
+      "keywords": ["contact", "number", "email", "phone", "reach", "support", "hours"],
+      "a": "You can contact us anytime at craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day."
+    },
+    {
+      "keywords": ["pricing", "cost", "monthly", "fee", "charge", "subscription", "price", "money"],
+      "a": "Our service costs $35 per month with an initial setup fee of $75. You can cancel anytime before your next billing cycle without penalty."
+    },
+    {
+      "keywords": ["install", "installation", "setup", "how to add", "integration", "apply", "code"],
+      "a": "Installing our chatbot on your site is simple: add ~10 lines of HTML we provide. Your unique ID applies all your customizations automatically."
+    },
+    {
+      "keywords": ["lead", "form", "follow up", "contact form", "customer info"],
+      "a": "We collect leads through a small form at the top of the chatbox. Visitors can leave name, email, phone, and a message; entries go straight to your Google Sheet."
+    }
+  ],
+
+  "leadForm": {
+    "enabled": true,
+    "delayMs": 8000,
+    "toggleLabel": "Leave your info",
+    "title": "Want us to reach out?",
+    "note": "Prefer a quick follow-up? Share your details and we’ll send tailored info.",
+    "placeholders": {
+      "name": "Your name",
+      "email": "Email address",
+      "phone": "Phone number",
+      "message": "Anything specific you’re looking for?"
+    },
+    "buttonLabel": "Send"
+  },
+
+  "ui": {
+    "fontFamily": "Inter, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "buttonEmoji": "💬",
+    "buttonSizePx": 72,
+    "buttonBg": "#3a86ff",
+    "buttonHoverBg": "#265ecf",
+    "buttonRadiusPx": 36,
+
+    "chatWidthPx": 360,
+    "chatHeightPx": 560,
+    "chatBg": "#ffffff",
+    "chatBorderColor": "#e6e6ea",
+    "chatRadiusPx": 16,
+
+    "hintText": "Questions about setup, support, or pricing?",
+    "hintBg": "#3a86ff",
+    "hintColor": "#ffffff",
+
+    "botBubbleBg": "#e5e5ea",
+    "botBubbleColor": "#000000",
+    "userBubbleBg": "#0b93f6",
+    "userBubbleColor": "#ffffff",
+    "bubbleRadiusPx": 18,
+
+    "shadow": "0 10px 28px rgba(0,0,0,0.25)",
+    "proactiveOpenMs": 0,
+    "leadThanks": "Perfect—got it! We'll follow up shortly."
+  }
+}
