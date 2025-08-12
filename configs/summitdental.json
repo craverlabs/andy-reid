@@ -1,0 +1,70 @@
+{
+  "brandName": "Summit Dental",
+  "sheetId": "1AbCdEFghIJKlmNoPqRsTuVWxyzDENTALDEMO",
+
+  "model": { "name": "gpt-3.5-turbo" },
+
+  "systemPrompt": "Sound warm and concise. Only use the context and FAQs provided. If info is missing, say you're not certain and offer contact details. For any pricing or money questions, reply exactly: our service costs $35 per month with an initial setup fee of $75.",
+
+  "welcomeMessage": "Welcome to Summit Dental! How can we help your smile today?",
+  "closingMessage": "Thanks for chatting! If you’d like to book, use the form above.",
+  "fallback": { "answer": "I’m not certain based on what I have. I can connect you with our team." },
+
+  "commonQuestions": [
+    "What services do you offer?",
+    "How do I book an appointment?",
+    "Do you accept my insurance?"
+  ],
+
+  "faqs": [
+    { "keywords": ["services", "offer", "cleaning", "whitening", "fillings", "veneers", "implants"], "a": "We offer cleanings, whitening, fillings, crowns, root canals, veneers, and implants." },
+    { "keywords": ["appointment", "book", "schedule"], "a": "You can book by calling (555) 201-0099 or emailing hello@summitdental.com. We’re open Mon–Fri 8am–6pm." },
+    { "keywords": ["insurance", "plan", "coverage"], "a": "We accept most major insurance plans. Share your provider and we’ll confirm coverage." },
+    { "keywords": ["pricing", "cost", "fee", "charge", "subscription", "price", "money"], "a": "Our service costs $35 per month with an initial setup fee of $75. You can cancel anytime before your next billing cycle without penalty." },
+    { "keywords": ["emergency", "urgent"], "a": "For urgent dental issues, call (555) 201-0099. We keep emergency slots every weekday." }
+  ],
+
+  "leadForm": {
+    "enabled": true,
+    "delayMs": 8000,
+    "toggleLabel": "Leave your info",
+    "title": "Want a quick follow-up?",
+    "note": "Share your details and our coordinator will reach out with options.",
+    "placeholders": {
+      "name": "Full name",
+      "email": "Email",
+      "phone": "Phone",
+      "message": "Reason for visit (optional)"
+    },
+    "buttonLabel": "Request"
+  },
+
+  "ui": {
+    "fontFamily": "Inter, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "buttonEmoji": "🦷",
+    "buttonSizePx": 74,
+    "buttonBg": "#1e90ff",
+    "buttonHoverBg": "#0f6bc6",
+    "buttonRadiusPx": 36,
+
+    "chatWidthPx": 370,
+    "chatHeightPx": 560,
+    "chatBg": "#ffffff",
+    "chatBorderColor": "#e6e6ea",
+    "chatRadiusPx": 16,
+
+    "hintText": "Questions about appointments or insurance?",
+    "hintBg": "#1e90ff",
+    "hintColor": "#ffffff",
+
+    "botBubbleBg": "#eef2ff",
+    "botBubbleColor": "#121212",
+    "userBubbleBg": "#1e90ff",
+    "userBubbleColor": "#ffffff",
+    "bubbleRadiusPx": 18,
+
+    "shadow": "0 10px 28px rgba(0,0,0,0.25)",
+    "proactiveOpenMs": 0,
+    "leadThanks": "Thanks! Our team will reach out soon."
+  }
+}
