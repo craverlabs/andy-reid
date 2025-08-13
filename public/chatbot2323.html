@@ -372,6 +372,23 @@
     }
   });
 
+  // /chat call
+const r = await fetch(`/chat?client=${encodeURIComponent(clientId)}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: trimmed }),
+  credentials: "include"          // <= add this
+});
+
+// /lead call
+const r = await fetch("/lead", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(payload),
+  credentials: "include"          // <= add this
+});
+
+
   input.addEventListener("input", () => { send.disabled = input.value.trim().length === 0; });
   send.addEventListener("click", () => { const t = input.value.trim(); if (t) sendMessage(t); });
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !send.disabled) { e.preventDefault(); send.click(); } });
