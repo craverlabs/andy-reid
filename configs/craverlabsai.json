@@ -4,14 +4,48 @@
 
   "model": { "name": "gpt-5-mini" },
 
-  "systemPrompt": "You are Craver Labs AI’s website chatbot. Be friendly, natural, and concise. Always: (1) Prefer facts from this config first; (2) If the exact answer isn’t present, reason from what is present and general web-chatbot know-how; (3) If still uncertain, ask a brief clarifying question BEFORE falling back; (4) For any pricing/money prompt, reply EXACTLY: our service costs $35 per month with an initial setup fee of $75. Keep replies short unless the user asks to 'expand' or 'details'. Maintain conversation memory from the provided messages—do not claim memory beyond what is shown. If asked 'what was your last message?', summarize your immediately previous assistant message from the chat history. Never invent emails, phone numbers, or URLs.",
+  "systemPrompt": "You are Craver Labs AI’s website chatbot. Be friendly, natural, and concise. Always: (1) Prefer facts from this config first; (2) If the exact answer isn’t present, reason from what is present and general web-chatbot know-how; (3) If still uncertain, ask one brief clarifying question BEFORE falling back; (4) For any pricing/money prompt, reply EXACTLY: our service costs $35 per month with an initial setup fee of $75. Keep replies short unless the user asks to 'expand' or 'details'. Maintain conversation memory only from the provided messages—do not claim memory beyond what is shown. If asked 'what was your last message?', summarize your immediately previous assistant message from the chat history. Never invent emails, phone numbers, or URLs.",
 
   "welcomeMessage": "Hi! I’m here to help with setup, support, or pricing—what do you need?",
   "closingMessage": "Okay! If you'd like to connect further, please fill out the form above.",
 
   "fallback": {
-    "answer": "I’m not certain yet—could you clarify what you need (installation steps, pricing, or lead setup)?"
+    "answer": "I’m not certain yet—could you clarify what you need (installation steps, pricing, or lead setup)?",
+    "secondAnswer": "I can help with installation, pricing, or lead setup.",
+    "attachMenuOnFallback": true
   },
+
+  "behavior": {
+    "enableGreeter": true,
+    "greeterMessage": "Hi! I’m here to help with setup, support, or pricing—what do you need?",
+    "clarifyMessage": "Got it—what do you need help with (installation steps, pricing, or lead setup)?",
+    "menuItemCount": 4,
+
+    "greetingPatterns": [
+      "\\b(hi|hello|hey|yo|howdy|good (morning|afternoon|evening))\\b"
+    ],
+    "lowInfoPatterns": [
+      "^(\\s*[\\?\\.!]*\\s*|what[?!]*|are you[?!]*|huh[?!]*|idk|ok|k|sure|yeah|yep|nope|who(dis)?|sup)\\s*$"
+    ],
+
+    "enableNonRepeatingFallback": true,
+    "errorNoteOnce": "(temporary issue, trying again shortly)",
+
+    "semantic": { "minScore": 0.18 },
+
+    "memory": {
+      "historyTurns": 8,
+      "lastMessageTemplate": "My last message was: \"{{text}}\"",
+      "noLastMessageTemplate": "I haven’t sent a prior message yet in this session."
+    }
+  },
+
+  "commonQuestions": [
+    "How do I install the chatbot on my website?",
+    "How does lead collection work?",
+    "How do you connect to my Google Sheet?",
+    "What is the pricing model?"
+  ],
 
   "knowledge": {
     "overview": "Craver Labs AI provides an embeddable website chatbot that answers FAQs and collects leads. Leads are appended to a connected Google Sheet.",
@@ -37,37 +71,35 @@
     "pricing_policy": "our service costs $35 per month with an initial setup fee of $75"
   },
 
-  "commonQuestions": [
-    "How do I install the chatbot on my website?",
-    "How does lead collection work?",
-    "How do you connect to my Google Sheet?",
-    "What is the pricing model?",
-    "Can you customize the look and messages?"
-  ],
-
   "faqs": [
     {
       "q": "How do I install the chatbot on my website?",
+      "keywords": ["install", "installation", "setup", "how to add", "integration", "apply", "code", "embed"],
       "a": "We send ~10–15 lines of HTML with your clientId. Paste them into your site’s HTML/Embed widget. The widget then fetches your JSON config and applies all styles and text automatically."
     },
     {
       "q": "How does lead collection work?",
+      "keywords": ["lead", "form", "follow up", "contact form", "customer info"],
       "a": "A small form sits at the top of the chat. Visitors enter name, email, phone, and a message. When they submit, your backend appends a new row into your connected Google Sheet so you can follow up."
     },
     {
       "q": "How do you connect to my Google Sheet?",
+      "keywords": ["google sheet", "sheet", "sheetId", "leads sheet", "spreadsheet"],
       "a": "We use your sheetId and a secure service account with edit access. Each submission writes a new row (timestamp, name, email, phone, message, pagePath). No manual changes needed—everything is automatic once connected."
     },
     {
       "q": "What is the pricing model?",
+      "keywords": ["pricing", "cost", "monthly", "fee", "charge", "subscription", "price", "money"],
       "a": "our service costs $35 per month with an initial setup fee of $75."
     },
     {
       "q": "How do I contact support?",
-      "a": "Email craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day."
+      "keywords": ["contact", "number", "email", "phone", "reach", "support", "hours"],
+      "a": "You can contact us anytime at craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day."
     },
     {
       "q": "Can you customize the look and messages?",
+      "keywords": ["customize", "theme", "colors", "fonts", "welcome", "messages"],
       "a": "Yes. Colors, fonts, bubble styles, welcome text, suggestions, and the lead form labels are all driven by your JSON config—no code changes required."
     }
   ],
@@ -122,7 +154,7 @@
     "chatHeightPx": 560,
     "chatBg": "#ffffff",
     "chatBorderColor": "#e6e6ea",
-    "chatRadiusPx": 16,
+    "chatRadiusPx": 16",
 
     "hintText": "Questions about setup, support, or pricing?",
     "hintBg": "#3a86ff",
