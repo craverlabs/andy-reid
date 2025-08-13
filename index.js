@@ -1,8 +1,10 @@
 // Multi-client chatbot backend with grounded AI answers (no hallucinations).
 // - Reads /configs/<clientId>.json (hot-reloaded)
-// - Semantic FAQ match first (q/a + keywords supported); pricing guardrail
-// - Conversational model fallback with rolling session history
-// - Model constrained to ONLY use provided context/FAQs and admit uncertainty
+// - Semantic match across FAQs + Knowledge (q/a + keywords supported)
+// - Conversational model fallback with rolling session history + few-shot examples
+// - Behavior (greeter, low-info handling, fallback style, thresholds, memory) driven by client JSON
+// - Pricing guardrail; "last message" special
+// - Google Sheet lead capture
 
 import express from "express";
 import cors from "cors";
@@ -68,23 +70,20 @@ function wordBoundaryIncludes(message, keyword) {
   return re.test(message);
 }
 function getContactLine(cfg) {
-  // Prefer explicit 'support' FAQ item, else empty
   const faqs = cfg?.faqs || [];
   for (const f of faqs) {
     const keys = (f.keywords || []).map(k => String(k).toLowerCase());
-    if (keys.some(k => ["contact","support","email","phone","reach","number","hours"].includes(k))) {
-      return f.a;
-    }
+    if (keys.some(k => ["contact","support","email","phone","reach","number","hours"].includes(k))) return f.a;
   }
-  // Also check q-text FAQs
   for (const f of faqs) {
-    if ((f.q || "").toLowerCase().includes("contact")) return f.a;
-    if ((f.q || "").toLowerCase().includes("support")) return f.a;
+    const q = (f.q || "").toLowerCase();
+    if (q.includes("contact") || q.includes("support")) return f.a;
   }
+  // fallback: knowledge.support if present
+  if (cfg?.knowledge?.support) return cfg.knowledge.support;
   return "";
 }
 function getPricingLine(cfg) {
-  // Explicitly scan FAQs first
   const faqs = cfg?.faqs || [];
   for (const f of faqs) {
     const keys = (f.keywords || []).map(k => String(k).toLowerCase());
@@ -92,26 +91,56 @@ function getPricingLine(cfg) {
       return f.a;
     }
   }
-  // Or rely on hard-coded policy text in config if present
   if (cfg?.knowledge?.pricing_policy) return cfg.knowledge.pricing_policy;
-  // Hard fallback
   return "Our service costs $35 per month with an initial setup fee of $75.";
 }
 
-// ---------- Grounding context ----------
+// ---------- Behavior from JSON with sane defaults ----------
+function bval(cfg, path, fallback) {
+  const parts = path.split(".");
+  let cur = cfg?.behavior;
+  for (const p of parts) {
+    if (cur && Object.prototype.hasOwnProperty.call(cur, p)) cur = cur[p];
+    else return fallback;
+  }
+  return cur ?? fallback;
+}
+function safeRegexUnion(patterns, fallbackRe) {
+  try {
+    const joined = (patterns || []).map(s => `(?:${s})`).join("|");
+    return joined ? new RegExp(joined, "i") : fallbackRe;
+  } catch {
+    return fallbackRe;
+  }
+}
+
+// ---------- Grounding context (includes FAQs + Knowledge + styling) ----------
 function buildGroundingContext(cfg) {
   const brand = cfg.brandName || "Craver Labs AI";
   const contact = getContactLine(cfg);
   const pricing = getPricingLine(cfg);
 
-  const faqLines = (cfg.faqs || []).slice(0, 24).map((f, i) => {
+  const faqLines = (cfg.faqs || []).slice(0, 48).map((f, i) => {
     const header = f.q ? `Q: ${f.q}` : `FAQ ${i+1}`;
-    const keys = (f.keywords || []).slice(0, 8).join(", ");
+    const keys = (f.keywords || []).slice(0, 10).join(", ");
     const keyStr = keys ? ` [${keys}]` : "";
     return `${header}${keyStr}\nA: ${f.a}`;
   }).join("\n\n");
 
-  // Try to find install/how-to answer from either q/a or keywords
+  // Knowledge blocks flattened
+  const knowledgeBlocks = [];
+  if (cfg.knowledge) {
+    for (const [k, v] of Object.entries(cfg.knowledge)) {
+      if (Array.isArray(v)) {
+        knowledgeBlocks.push(`${k}:\n- ${v.join("\n- ")}`);
+      } else if (typeof v === "string") {
+        knowledgeBlocks.push(`${k}: ${v}`);
+      }
+    }
+  }
+  const knowledgeText = knowledgeBlocks.length ? `\n\nKNOWLEDGE:\n${knowledgeBlocks.join("\n\n")}` : "";
+
+  // Find install summary
   const aboutInstall =
     (cfg.faqs || []).find(f =>
       (f.q && /install|setup|integration|code|embed/i.test(f.q)) ||
@@ -119,9 +148,7 @@ function buildGroundingContext(cfg) {
     )?.a ||
     "Install is quick: add ~10–15 lines of HTML; your unique ID applies your customizations.";
 
-  const style = cfg.systemPrompt
-    ? `STYLE GUIDANCE:\n${cfg.systemPrompt}\n\n`
-    : "";
+  const style = cfg.systemPrompt ? `STYLE GUIDANCE:\n${cfg.systemPrompt}\n\n` : "";
 
   return `${style}BRAND: ${brand}
 
@@ -132,17 +159,17 @@ CONTACT: ${contact || "(Contact details not provided.)"}
 INSTALLATION: ${aboutInstall}
 
 POLICIES:
-- Use ONLY information in this CONTEXT and FAQs. Do NOT invent features/services.
+- Use ONLY information in this CONTEXT, FAQs, and KNOWLEDGE. Do NOT invent features/services.
 - If the user asks about pricing or money, answer with the AUTHORITATIVE PRICING line verbatim.
 - If the exact info is not present, say you're not certain and offer CONTACT.
 - Keep replies natural and concise (<=120 words). Avoid repeating the same greeting.
 
 FAQs:
-${faqLines || "(none provided)"}`;
+${faqLines || "(none provided)"}${knowledgeText}`;
 }
 
-// ---------- Simple semantic FAQ selection (no embeddings) ----------
-const STOPWORDS = new Set([
+// ---------- Simple semantic selection across FAQs + Knowledge (no embeddings) ----------
+const DEFAULT_STOPWORDS = new Set([
   "the","a","an","and","or","but","of","to","in","on","for","with","about","is","it","this","that","i","you","we",
   "me","my","your","our","at","as","by","be","are","was","were","from","can","how","what","when","where","why",
   "do","did","does","please","could","would","should","tell","say","more","expand","details","detail","info"
@@ -152,7 +179,7 @@ function tokenize(s) {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter(w => w && !STOPWORDS.has(w));
+    .filter(w => w && !DEFAULT_STOPWORDS.has(w));
 }
 function overlapScore(aTokens, bTokens) {
   if (!aTokens.length || !bTokens.length) return 0;
@@ -160,26 +187,50 @@ function overlapScore(aTokens, bTokens) {
   const bSet = new Set(bTokens);
   let inter = 0;
   for (const t of aSet) if (bSet.has(t)) inter++;
-  const denom = Math.sqrt(aSet.size * bSet.size); // cosine-like
+  const denom = Math.sqrt(aSet.size * bSet.size);
   return denom ? inter / denom : 0;
 }
-function bestFaqMatch(cfg, userMsg) {
+function collectKnowledgeSnippets(cfg) {
+  const out = [];
+  if (!cfg?.knowledge) return out;
+  for (const [k, v] of Object.entries(cfg.knowledge)) {
+    if (Array.isArray(v)) {
+      v.forEach((line, i) => {
+        out.push({ q: `${k} ${i+1}`, a: String(line) });
+      });
+    } else if (typeof v === "string") {
+      out.push({ q: k, a: v });
+    }
+  }
+  return out;
+}
+function bestSemanticMatch(cfg, userMsg, minScore = 0.18) {
+  const items = [];
   const faqs = cfg?.faqs || [];
-  if (!faqs.length) return null;
+  faqs.forEach(f => items.push({ q: [f.q, ...(f.keywords||[])].filter(Boolean).join(" "), a: f.a }));
+
+  const kn = collectKnowledgeSnippets(cfg);
+  kn.forEach(s => items.push({ q: s.q, a: s.a }));
+
+  if (!items.length) return null;
 
   const uTok = tokenize(userMsg);
   let best = null;
 
-  faqs.forEach((f, idx) => {
-    const qText = [f.q, ...(f.keywords || [])].filter(Boolean).join(" ");
-    const aText = f.a || "";
-    const candTok = tokenize(`${qText} ${aText}`);
+  items.forEach((itm, idx) => {
+    const candTok = tokenize(`${itm.q || ""} ${itm.a || ""}`);
     const score = overlapScore(uTok, candTok);
-    if (!best || score > best.score) best = { idx, item: f, score };
+    if (!best || score > best.score) best = { idx, item: itm, score };
   });
 
-  // Threshold—tuneable. 0.18 works decently for short queries.
-  return best && best.score >= 0.18 ? best.item : null;
+  return best && best.score >= minScore ? best.item : null;
+}
+
+// ---------- Menus / greetings ----------
+function menuFromCommonQuestions(cfg, count = 4) {
+  const qs = (cfg.commonQuestions || []).slice(0, count);
+  if (!qs.length) return "";
+  return "\n\nHere are a few things I can help with:\n– " + qs.join("\n– ");
 }
 
 // ---------- Google Sheets ----------
@@ -215,32 +266,68 @@ app.post("/chat", async (req, res) => {
   const cfg = getClientConfig(clientId);
   if (!cfg) return res.status(400).json({ error: "Invalid client" });
 
-  if (!req.session[clientId]) req.session[clientId] = { askedExtra: false, history: [] };
+  // Behavior config
+  const enableGreeter = bval(cfg, "enableGreeter", true);
+  const greeterMessage = bval(cfg, "greeterMessage", cfg.welcomeMessage || "Hi! I’m here to help with setup, support, or pricing—what do you need?");
+  const clarifyMessage = bval(cfg, "clarifyMessage", "Got it—what do you need help with (installation steps, pricing, or lead setup)?");
+  const menuItemCount = bval(cfg, "menuItemCount", 4);
+  const minSemantic = bval(cfg, "semantic.minScore", 0.18);
+  const historyTurns = bval(cfg, "memory.historyTurns", 8);
+  const lastTpl = bval(cfg, "memory.lastMessageTemplate", 'My last message was: "{{text}}"');
+  const lastNoneTpl = bval(cfg, "memory.noLastMessageTemplate", "I haven’t sent a prior message yet in this session.");
+  const enableNRFallback = bval(cfg, "enableNonRepeatingFallback", true);
+  const attachMenuOnFallback = cfg?.fallback?.attachMenuOnFallback ?? true;
+  const fallback1 = cfg?.fallback?.answer || "I’m not certain yet—could you clarify what you need (installation steps, pricing, or lead setup)?";
+  const fallback2 = cfg?.fallback?.secondAnswer || "I can help with installation, pricing, or lead setup.";
+  const errorNoteOnce = bval(cfg, "errorNoteOnce", "(temporary issue, trying again shortly)");
+
+  // Regex from JSON (safe-compiled)
+  const GREETING_RE = safeRegexUnion(bval(cfg, "greetingPatterns", [
+    "\\b(hi|hello|hey|yo|howdy|good (morning|afternoon|evening))\\b"
+  ]), /\b(hi|hello|hey|yo|howdy|good (morning|afternoon|evening))\b/i);
+
+  const LOWINFO_RE = safeRegexUnion(bval(cfg, "lowInfoPatterns", [
+    "^(\\s*[\\?\\.!]*\\s*|what[?!]*|are you[?!]*|huh[?!]*|idk|ok|k|sure|yeah|yep|nope|who(dis)?|sup)\\s*$"
+  ]), /^(\s*[\?\.!]*\s*|what[?!]*|are you[?!]*|huh[?!]*|idk|ok|k|sure|yeah|yep|nope|who(dis)?|sup)\s*$/i);
+
+  // Session init
+  if (!req.session[clientId]) req.session[clientId] = { askedExtra: false, history: [], usedFallbackOnce: false, errorNotified: false };
   const s = req.session[clientId];
 
   const messageRaw = (req.body.message || "").toString();
   const lower = messageRaw.trim().toLowerCase();
 
-  // 0) Special: "what was your last message"
+  // 0) "what was your last message?"
   if (/\b(last message|what did you just say|what was your previous reply)\b/i.test(lower)) {
     const last = [...(s.history || [])].reverse().find(m => m.role === "assistant");
-    const reply = last?.content
-      ? `My last message was: "${last.content}"`
-      : "I haven’t sent a prior message yet in this session.";
+    const reply = last?.content ? lastTpl.replace("{{text}}", last.content) : lastNoneTpl;
     s.history.push({ role: "user", content: messageRaw });
     s.history.push({ role: "assistant", content: reply });
-    s.history = s.history.slice(-20);
+    s.history = s.history.slice(-2 * historyTurns);
     return res.json({ reply });
   }
 
-  // 1) Semantic FAQ pass (uses q/a and keywords; replaces brittle keyword-only match)
-  const sem = bestFaqMatch(cfg, lower);
-  if (sem?.a) {
-    const reply = sem.a;
+  // 0.5) Greeter / low-info handler (prevents fallback loops)
+  if (enableGreeter && (GREETING_RE.test(lower) || LOWINFO_RE.test(lower))) {
+    const base = GREETING_RE.test(lower) ? greeterMessage : clarifyMessage;
+    let reply = base;
+    if (menuItemCount > 0) reply += menuFromCommonQuestions(cfg, menuItemCount);
     s.askedExtra = true;
     s.history.push({ role: "user", content: messageRaw });
     s.history.push({ role: "assistant", content: reply });
-    s.history = s.history.slice(-20);
+    s.history = s.history.slice(-2 * historyTurns);
+    return res.json({ reply });
+  }
+
+  // 1) Semantic pass over FAQs + Knowledge
+  const sem = bestSemanticMatch(cfg, lower, Number(minSemantic) || 0.18);
+  if (sem?.a) {
+    const reply = sem.a;
+    s.askedExtra = true;
+    s.usedFallbackOnce = false;
+    s.history.push({ role: "user", content: messageRaw });
+    s.history.push({ role: "assistant", content: reply });
+    s.history = s.history.slice(-2 * historyTurns);
     return res.json({ reply });
   }
 
@@ -249,38 +336,45 @@ app.post("/chat", async (req, res) => {
     const reply = getPricingLine(cfg);
     s.history.push({ role: "user", content: messageRaw });
     s.history.push({ role: "assistant", content: reply });
-    s.history = s.history.slice(-20);
+    s.history = s.history.slice(-2 * historyTurns);
     return res.json({ reply });
   }
 
-  // 3) Closing pass (after at least one helpful answer)
+  // 3) Closing pass
   if (s.askedExtra && /\b(no|nope|that's all|nothing|i'm good|im good|all set)\b/i.test(lower)) {
     const closing = cfg.closingMessage || "";
     s.history.push({ role: "user", content: messageRaw });
     s.history.push({ role: "assistant", content: closing });
-    s.history = s.history.slice(-20);
+    s.history = s.history.slice(-2 * historyTurns);
     return res.json({ reply: closing });
   }
 
-  // 4) Grounded model fallback (short rolling history maintained)
+  // 4) Grounded model fallback (reason from CONTEXT/FAQs/KNOWLEDGE + short history + examples)
   try {
     const modelName = (cfg.model && cfg.model.name) || "gpt-5-mini";
     const grounding = buildGroundingContext(cfg);
-    const prior = (s.history || []).slice(-8); // short rolling history
+    const prior = (s.history || []).slice(-historyTurns);
     const messages = [
       {
         role: "system",
         content:
 `You are a helpful assistant for ${cfg.brandName || "Craver Labs AI"}.
+You are stateless; use only the provided conversation messages and the CONTEXT below.
+If specific details are missing, ask one brief clarifying question or say you're not certain and offer CONTACT.
+
 CONTEXT (authoritative):
 ${grounding}
 
 INSTRUCTIONS:
-- Use ONLY the above CONTEXT and FAQs.
-- If unsure or not present in CONTEXT, say you're not certain and provide CONTACT info.
+- Use ONLY the above CONTEXT, FAQs, and KNOWLEDGE.
 - If asked about pricing/money, reply with the AUTHORITATIVE PRICING line exactly.
 - Keep responses natural and concise (<=120 words).`
       },
+      // Few-shot examples (optional, from config)
+      ...((cfg.semanticExamples || []).slice(0, 4).flatMap(ex => ([
+        { role: "user", content: ex.user },
+        { role: "assistant", content: ex.assistant }
+      ]))),
       ...prior,
       { role: "user", content: messageRaw }
     ];
@@ -292,21 +386,43 @@ INSTRUCTIONS:
       messages
     });
 
-    const text = rsp.choices?.[0]?.message?.content?.trim();
-    const reply = text && text.length
-      ? text
-      : (cfg.fallback?.answer || "I’m not certain based on what I have. " + getContactLine(cfg));
+    let text = rsp.choices?.[0]?.message?.content?.trim();
+    // Safety net: if the model ignored the pricing rule, force-correct
+    if (/\b(price|pricing|cost|fee|charge|subscription|money)\b/i.test(lower)) {
+      text = getPricingLine(cfg);
+    }
+
+    let reply = text && text.length ? text : fallback1;
+    if ((!text || !text.length) && attachMenuOnFallback && menuItemCount > 0) {
+      reply += menuFromCommonQuestions(cfg, menuItemCount);
+    }
 
     s.askedExtra = true;
+    s.usedFallbackOnce = !text || !text.length;
     s.history.push({ role: "user", content: messageRaw });
     s.history.push({ role: "assistant", content: reply });
-    s.history = s.history.slice(-20);
+    s.history = s.history.slice(-2 * historyTurns);
     return res.json({ reply });
   } catch (err) {
     console.error("OpenAI error:", err);
-    const safe = (cfg.fallback && cfg.fallback.answer) || "I’m not certain based on what I have.";
-    const contact = getContactLine(cfg);
-    return res.json({ reply: contact ? `${safe} ${contact}` : safe });
+
+    // Non-repeating fallback
+    let reply;
+    if (enableNRFallback && !s.usedFallbackOnce) {
+      reply = fallback1;
+      if (attachMenuOnFallback && menuItemCount > 0) reply += menuFromCommonQuestions(cfg, menuItemCount);
+      if (!s.errorNotified && errorNoteOnce) reply += ` ${errorNoteOnce}`;
+      s.usedFallbackOnce = true;
+      s.errorNotified = true;
+    } else {
+      reply = fallback2;
+      if (attachMenuOnFallback && menuItemCount > 0) reply += menuFromCommonQuestions(cfg, menuItemCount);
+    }
+
+    s.history.push({ role: "user", content: messageRaw });
+    s.history.push({ role: "assistant", content: reply });
+    s.history = s.history.slice(-2 * historyTurns);
+    return res.json({ reply });
   }
 });
 
@@ -337,6 +453,7 @@ app.get("/common-questions", (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Server on :${PORT}`));
+
 
 
 
