@@ -154,7 +154,7 @@
     "chatHeightPx": 560,
     "chatBg": "#ffffff",
     "chatBorderColor": "#e6e6ea",
-    "chatRadiusPx": 16",
+    "chatRadiusPx": 16,
 
     "hintText": "Questions about setup, support, or pricing?",
     "hintBg": "#3a86ff",
