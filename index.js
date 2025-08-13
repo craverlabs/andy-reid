@@ -192,7 +192,7 @@ app.post("/chat", async (req, res) => {
 
   // 4) Grounded model fallback
   try {
-    const modelName = (cfg.model && cfg.model.name) || "gpt-3.5-turbo";
+    const modelName = (cfg.model && cfg.model.name) || "gpt-5-mini";
     const grounding = buildGroundingContext(cfg);
     const prior = (s.history || []).slice(-8); // short rolling history
     const messages = [
