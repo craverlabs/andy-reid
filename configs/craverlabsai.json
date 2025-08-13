@@ -2,36 +2,96 @@
   "brandName": "Craver Labs AI",
   "sheetId": "1U7CtRymU8lNsywnAzkmX3qKYNR2GTdwiIwU565h8iX0",
 
-  "model": { "name": "gpt-3.5-turbo" },
+  "model": { "name": "gpt-5-mini" },
 
-  "systemPrompt": "Be friendly, natural, and concise. Match the user's tone without being repetitive. Only use the details given in this context and FAQs. If info is missing, say you're not certain and offer contact details. For any question related to pricing or money, reply exactly: our service costs $35 per month with an initial setup fee of $75.",
+  "systemPrompt": "You are Craver Labs AI’s website chatbot. Be friendly, natural, and concise. Always: (1) Prefer facts from this config first; (2) If the exact answer isn’t present, reason from what is present and general web-chatbot know-how; (3) If still uncertain, ask a brief clarifying question BEFORE falling back; (4) For any pricing/money prompt, reply EXACTLY: our service costs $35 per month with an initial setup fee of $75. Keep replies short unless the user asks to 'expand' or 'details'. Maintain conversation memory from the provided messages—do not claim memory beyond what is shown. If asked 'what was your last message?', summarize your immediately previous assistant message from the chat history. Never invent emails, phone numbers, or URLs.",
 
   "welcomeMessage": "Hi! I’m here to help with setup, support, or pricing—what do you need?",
   "closingMessage": "Okay! If you'd like to connect further, please fill out the form above.",
-  "fallback": { "answer": "I’m not certain based on what I have. Would you like me to connect you with our team?" },
+
+  "fallback": {
+    "answer": "I’m not certain yet—could you clarify what you need (installation steps, pricing, or lead setup)?"
+  },
+
+  "knowledge": {
+    "overview": "Craver Labs AI provides an embeddable website chatbot that answers FAQs and collects leads. Leads are appended to a connected Google Sheet.",
+    "product_install": [
+      "We provide ~10–15 lines of HTML with your clientId.",
+      "Paste into your site’s HTML/Embed widget.",
+      "The widget fetches your JSON config and applies styles/text automatically."
+    ],
+    "lead_flow": [
+      "A small lead form appears at the top of the chatbox (or on toggle).",
+      "Fields: name, email, phone, message.",
+      "On submit, the backend appends a new row to your Google Sheet (sheetId).",
+      "You can customize the form labels/placeholders per brand."
+    ],
+    "google_sheet_setup": [
+      "We connect your Google Sheet via its sheetId.",
+      "Backend has a service account with edit permissions.",
+      "Each lead submission writes a new row: timestamp, name, email, phone, message, pagePath.",
+      "No sheet editing is needed after setup—rows append automatically.",
+      "You can open the Sheet anytime to view, filter, or export leads."
+    ],
+    "support": "Email craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day.",
+    "pricing_policy": "our service costs $35 per month with an initial setup fee of $75"
+  },
 
   "commonQuestions": [
     "How do I install the chatbot on my website?",
-    "What are your hours of support?",
-    "What is the pricing model?"
+    "How does lead collection work?",
+    "How do you connect to my Google Sheet?",
+    "What is the pricing model?",
+    "Can you customize the look and messages?"
   ],
 
   "faqs": [
     {
-      "keywords": ["contact", "number", "email", "phone", "reach", "support", "hours"],
-      "a": "You can contact us anytime at craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day."
+      "q": "How do I install the chatbot on my website?",
+      "a": "We send ~10–15 lines of HTML with your clientId. Paste them into your site’s HTML/Embed widget. The widget then fetches your JSON config and applies all styles and text automatically."
     },
     {
-      "keywords": ["pricing", "cost", "monthly", "fee", "charge", "subscription", "price", "money"],
-      "a": "Our service costs $35 per month with an initial setup fee of $75. You can cancel anytime before your next billing cycle without penalty."
+      "q": "How does lead collection work?",
+      "a": "A small form sits at the top of the chat. Visitors enter name, email, phone, and a message. When they submit, your backend appends a new row into your connected Google Sheet so you can follow up."
     },
     {
-      "keywords": ["install", "installation", "setup", "how to add", "integration", "apply", "code"],
-      "a": "Installing our chatbot on your site is simple: add ~10 lines of HTML we provide. Your unique ID applies all your customizations automatically."
+      "q": "How do you connect to my Google Sheet?",
+      "a": "We use your sheetId and a secure service account with edit access. Each submission writes a new row (timestamp, name, email, phone, message, pagePath). No manual changes needed—everything is automatic once connected."
     },
     {
-      "keywords": ["lead", "form", "follow up", "contact form", "customer info"],
-      "a": "We collect leads through a small form at the top of the chatbox. Visitors can leave name, email, phone, and a message; entries go straight to your Google Sheet."
+      "q": "What is the pricing model?",
+      "a": "our service costs $35 per month with an initial setup fee of $75."
+    },
+    {
+      "q": "How do I contact support?",
+      "a": "Email craverlabsai@gmail.com or call 203-460-6095. We provide support most of the day, every day."
+    },
+    {
+      "q": "Can you customize the look and messages?",
+      "a": "Yes. Colors, fonts, bubble styles, welcome text, suggestions, and the lead form labels are all driven by your JSON config—no code changes required."
+    }
+  ],
+
+  "semanticExamples": [
+    {
+      "user": "expand on the lead collection",
+      "assistant": "Leads are captured via the small form at the top of the chat. When visitors submit, we write a new row to your Google Sheet (timestamp, name, email, phone, message, pagePath) so you can follow up quickly."
+    },
+    {
+      "user": "expand on google sheet setup",
+      "assistant": "We connect using your sheetId and a service account with edit access. No ongoing work on your end—each form submission appends a row automatically. You can open the Sheet anytime to view or export your leads."
+    },
+    {
+      "user": "what was your last message?",
+      "assistant": "I just explained how we connect to your Google Sheet: we use your sheetId with a service account, and each lead submission appends a new row automatically."
+    },
+    {
+      "user": "how do I add this to my website?",
+      "assistant": "Paste the ~10–15 lines of HTML we provide into your site’s HTML/Embed widget; your clientId pulls your JSON config so styles and text apply automatically."
+    },
+    {
+      "user": "what’s the price?",
+      "assistant": "our service costs $35 per month with an initial setup fee of $75."
     }
   ],
 
